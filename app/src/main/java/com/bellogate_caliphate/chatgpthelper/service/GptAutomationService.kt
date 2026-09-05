@@ -1,6 +1,9 @@
 package com.bellogate_caliphate.chatgpthelper.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -50,26 +53,41 @@ class GptAutomationService : AccessibilityService() {
         val inputNode = findEditableNode(rootNode)
             ?: return@withContext Pair(false, "Could not find ChatGPT input box in Chrome screen.")
 
-        // Focus input field
+        // 1. Copy text to System Clipboard so React detects genuine Paste event
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (clipboard != null) {
+                val clip = ClipData.newPlainText("ChatGPT Batch Prompt", batchText)
+                clipboard.setPrimaryClip(clip)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not access Clipboard: ${e.localizedMessage}")
+        }
+
+        // 2. Focus input field
         inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
 
+        // 3. Perform ACTION_SET_TEXT
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, batchText)
         }
-
         val textSetSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+
+        // 4. Perform ACTION_PASTE (triggers native Web input/paste events so React updates state)
+        inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+
         if (!textSetSuccess) {
             return@withContext Pair(false, "Failed to paste batch URLs into ChatGPT input box in Chrome.")
         }
 
-        // Move cursor/selection to end of text to trigger Web/React state update
+        // 5. Set cursor selection to end of text
         val selectionArgs = Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, batchText.length)
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, batchText.length)
         }
         inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selectionArgs)
 
-        // Poll over a 5-second window for Chrome web page to enable and present the Send button
+        // 6. Poll over a 5-second window for Chrome web page to enable and present the Send button
         for (attempt in 1..10) {
             delay(500)
             val currentRoot = rootInActiveWindow ?: rootNode
@@ -97,17 +115,40 @@ class GptAutomationService : AccessibilityService() {
     }
 
     private fun performClickOnNodeOrParent(node: AccessibilityNodeInfo?): Boolean {
-        var curr: AccessibilityNodeInfo? = node
+        if (node == null) return false
+
+        // 1. Try node directly
+        if (node.isClickable && node.isEnabled) {
+            if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
+        }
+
+        // 2. Try parents up 5 levels
+        var curr: AccessibilityNodeInfo? = node.parent
         var depth = 0
         while (curr != null && depth < 5) {
             if (curr.isClickable) {
-                val success = curr.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                if (success) return true
+                if (curr.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true
+                }
             }
             curr = curr.parent
             depth++
         }
-        return false
+
+        // 3. Try children
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (child.isClickable) {
+                if (child.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true
+                }
+            }
+        }
+
+        // 4. Force performAction(ACTION_CLICK) on node
+        return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
     private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
@@ -168,7 +209,7 @@ class GptAutomationService : AccessibilityService() {
     private fun findClickableNodeInInputContainer(inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         var parent: AccessibilityNodeInfo? = inputNode.parent
         var depth = 0
-        while (parent != null && depth < 3) {
+        while (parent != null && depth < 4) {
             for (i in 0 until parent.childCount) {
                 val child = parent.getChild(i) ?: continue
                 if (child != inputNode) {
