@@ -114,11 +114,16 @@ class GptAutomationService : AccessibilityService() {
         }
         inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selectionArgs)
 
-        // Wait 3 seconds for React on chatgpt.com to process the inserted batch and enable the Send button
+        // 6. Wait 3 seconds for React on chatgpt.com to process the inserted batch and enable the Send button
         Log.d("A11Y", "Batch pasted. Waiting 3 seconds for React state and Send button to update...")
         delay(3000)
 
-        // 6. Poll over a 5-second window to find and click composer-submit-button / screen coordinates
+        // 7. Press the Back button ONCE to dismiss the software keyboard
+        Log.d("A11Y", "Pressing Back button to dismiss software keyboard...")
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        delay(500) // Brief delay for keyboard dismissal animation
+
+        // 8. Poll over a 5-second window to find and click composer-submit-button / screen coordinates
         for (attempt in 1..10) {
             delay(500)
             val currentRoot = rootInActiveWindow ?: rootNode
