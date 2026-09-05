@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ChatGptHelper</string>
+    <string name="accessibility_service_description">Automates pasting URL batches into ChatGPT app for vacancy checking.</string>
+</resources>
