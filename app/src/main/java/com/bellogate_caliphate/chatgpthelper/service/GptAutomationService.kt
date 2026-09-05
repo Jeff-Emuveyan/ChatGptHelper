@@ -45,10 +45,10 @@ class GptAutomationService : AccessibilityService() {
      */
     suspend fun sendBatchToChatGPT(batchText: String): Pair<Boolean, String?> = withContext(Dispatchers.Main) {
         val rootNode = rootInActiveWindow
-            ?: return@withContext Pair(false, "Could not access screen. Make sure Chrome with ChatGPT is open in foreground.")
+            ?: return@withContext Pair(false, "Could not access screen. Make sure Chrome is open in foreground.")
 
         val inputNode = findEditableNode(rootNode)
-            ?: return@withContext Pair(false, "Could not find ChatGPT input box in Chrome.")
+            ?: return@withContext Pair(false, "Could not find ChatGPT input box in Chrome screen.")
 
         // Focus input field
         inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
@@ -62,11 +62,21 @@ class GptAutomationService : AccessibilityService() {
             return@withContext Pair(false, "Failed to paste batch URLs into ChatGPT input box in Chrome.")
         }
 
-        // Allow ChatGPT web UI state to update and reveal Send button (poll over 4 seconds)
-        for (attempt in 1..8) {
+        // Move cursor/selection to end of text to trigger Web/React state update
+        val selectionArgs = Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, batchText.length)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, batchText.length)
+        }
+        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selectionArgs)
+
+        // Poll over a 5-second window for Chrome web page to enable and present the Send button
+        for (attempt in 1..10) {
             delay(500)
             val currentRoot = rootInActiveWindow ?: rootNode
-            val sendNode = findSendButtonNode(currentRoot) ?: findClickableNodeNearInput(currentRoot, inputNode)
+
+            val sendNode = findSendButtonNode(currentRoot)
+                ?: findClickableNodeInInputContainer(inputNode)
+                ?: findClickableNodeNearInput(currentRoot, inputNode)
 
             if (sendNode != null) {
                 val clicked = performClickOnNodeOrParent(sendNode)
@@ -88,12 +98,14 @@ class GptAutomationService : AccessibilityService() {
 
     private fun performClickOnNodeOrParent(node: AccessibilityNodeInfo?): Boolean {
         var curr: AccessibilityNodeInfo? = node
-        while (curr != null) {
+        var depth = 0
+        while (curr != null && depth < 5) {
             if (curr.isClickable) {
                 val success = curr.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                 if (success) return true
             }
             curr = curr.parent
+            depth++
         }
         return false
     }
@@ -150,6 +162,28 @@ class GptAutomationService : AccessibilityService() {
             if (found != null) return found
         }
 
+        return null
+    }
+
+    private fun findClickableNodeInInputContainer(inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var parent: AccessibilityNodeInfo? = inputNode.parent
+        var depth = 0
+        while (parent != null && depth < 3) {
+            for (i in 0 until parent.childCount) {
+                val child = parent.getChild(i) ?: continue
+                if (child != inputNode) {
+                    val desc = child.contentDescription?.toString()?.lowercase() ?: ""
+                    val text = child.text?.toString()?.lowercase() ?: ""
+                    if (child.isClickable || desc.isNotEmpty() || text.isNotEmpty() || child.className == "android.widget.Button") {
+                        if (!desc.contains("mic") && !desc.contains("voice") && !desc.contains("attach")) {
+                            return child
+                        }
+                    }
+                }
+            }
+            parent = parent.parent
+            depth++
+        }
         return null
     }
 

@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -31,8 +30,7 @@ class AutomationForegroundService : Service() {
         private const val CHANNEL_ID = "chatgpt_automation_channel"
         private const val NOTIFICATION_ID = 1001
         private const val CHROME_PACKAGE_NAME = "com.android.chrome"
-        private const val CHATGPT_URL = "https://chatgpt.com"
-        private const val TIMER_INTERVAL_SECONDS = 240 // 4 minutes
+        private const val TIMER_INTERVAL_SECONDS = 60
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -95,8 +93,8 @@ class AutomationForegroundService : Service() {
                 AutomationManager.onBatchSending()
                 updateNotification("Sending batch ${state.sentBatches + 1} of ${state.totalBatches}...")
 
-                launchChromeWithChatGPT()
-                delay(3000) // Allow Chrome browser & web page to render
+                launchChromeApp()
+                delay(2000) // Allow Chrome browser to come to foreground
 
                 val (sendSuccess, errorDetails) = accessibilityService.sendBatchToChatGPT(currentBatch.formattedPrompt)
 
@@ -109,7 +107,7 @@ class AutomationForegroundService : Service() {
                         break
                     }
 
-                    // 4-Minute Timer Countdown
+                    // Countdown Timer
                     var secondsRemaining = TIMER_INTERVAL_SECONDS
                     while (secondsRemaining > 0 && isActive) {
                         val currentState = AutomationManager.state.value
@@ -138,22 +136,17 @@ class AutomationForegroundService : Service() {
         updateNotification("Automation paused")
     }
 
-    private fun launchChromeWithChatGPT() {
-        val uri = Uri.parse(CHATGPT_URL)
-        val chromeIntent = Intent(Intent.ACTION_VIEW, uri).apply {
-            setPackage(CHROME_PACKAGE_NAME)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-        }
-        try {
-            startActivity(chromeIntent)
-        } catch (e: Exception) {
-            val launchIntent = packageManager.getLaunchIntentForPackage(CHROME_PACKAGE_NAME)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+    private fun launchChromeApp() {
+        val launchIntent = packageManager.getLaunchIntentForPackage(CHROME_PACKAGE_NAME)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            try {
                 startActivity(launchIntent)
-            } else {
-                AutomationManager.setError("Google Chrome ($CHROME_PACKAGE_NAME) is not installed on this device.")
+            } catch (e: Exception) {
+                AutomationManager.setError("Could not bring Chrome to foreground: ${e.localizedMessage}")
             }
+        } else {
+            AutomationManager.setError("Google Chrome ($CHROME_PACKAGE_NAME) is not installed on this device.")
         }
     }
 
