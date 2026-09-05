@@ -83,7 +83,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Enable 'ChatGptHelper' in Accessibility Settings so the app can paste URLs into ChatGPT and click Send.",
+                            text = "Enable 'ChatGptHelper' in Accessibility Settings so the app can paste URLs into ChatGPT in Chrome and click Send.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             textAlign = TextAlign.Center

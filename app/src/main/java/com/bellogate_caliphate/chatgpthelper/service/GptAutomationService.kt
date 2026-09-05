@@ -26,7 +26,7 @@ class GptAutomationService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Monitored as needed for ChatGPT window changes
+        // Monitored as needed for window changes
     }
 
     override fun onInterrupt() {
@@ -40,15 +40,15 @@ class GptAutomationService : AccessibilityService() {
     }
 
     /**
-     * Pastes current batch into ChatGPT app input field and clicks Send button.
+     * Pastes current batch into ChatGPT web in Chrome and clicks Send button.
      * Suspends until the operation succeeds or times out.
      */
     suspend fun sendBatchToChatGPT(batchText: String): Pair<Boolean, String?> = withContext(Dispatchers.Main) {
         val rootNode = rootInActiveWindow
-            ?: return@withContext Pair(false, "Could not access screen. Make sure ChatGPT app is open in foreground.")
+            ?: return@withContext Pair(false, "Could not access screen. Make sure Chrome with ChatGPT is open in foreground.")
 
         val inputNode = findEditableNode(rootNode)
-            ?: return@withContext Pair(false, "Could not find text input box in ChatGPT screen.")
+            ?: return@withContext Pair(false, "Could not find ChatGPT input box in Chrome.")
 
         // Focus input field
         inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
@@ -59,10 +59,10 @@ class GptAutomationService : AccessibilityService() {
 
         val textSetSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
         if (!textSetSuccess) {
-            return@withContext Pair(false, "Failed to paste batch URLs into ChatGPT input box.")
+            return@withContext Pair(false, "Failed to paste batch URLs into ChatGPT input box in Chrome.")
         }
 
-        // Allow ChatGPT UI state to update and reveal Send button (poll over 4 seconds)
+        // Allow ChatGPT web UI state to update and reveal Send button (poll over 4 seconds)
         for (attempt in 1..8) {
             delay(500)
             val currentRoot = rootInActiveWindow ?: rootNode
@@ -83,7 +83,7 @@ class GptAutomationService : AccessibilityService() {
             return@withContext Pair(true, null)
         }
 
-        return@withContext Pair(false, "Batch pasted, but Send button could not be clicked.")
+        return@withContext Pair(false, "Batch pasted, but Send button could not be clicked in Chrome.")
     }
 
     private fun performClickOnNodeOrParent(node: AccessibilityNodeInfo?): Boolean {
@@ -100,9 +100,23 @@ class GptAutomationService : AccessibilityService() {
 
     private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
-        if (node.isEditable || node.className == "android.widget.EditText") {
+
+        val hint = node.hintText?.toString()?.lowercase() ?: ""
+        val contentDesc = node.contentDescription?.toString()?.lowercase() ?: ""
+        val text = node.text?.toString()?.lowercase() ?: ""
+        val resourceId = node.viewIdResourceName?.lowercase() ?: ""
+
+        val isEditableMatch = node.isEditable ||
+                node.className == "android.widget.EditText" ||
+                hint.contains("message") || hint.contains("ask") ||
+                contentDesc.contains("message") || contentDesc.contains("ask") ||
+                text.contains("message chatgpt") || text.contains("ask anything") ||
+                resourceId.contains("prompt-textarea")
+
+        if (isEditableMatch) {
             return node
         }
+
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findEditableNode(child)
@@ -161,7 +175,7 @@ class GptAutomationService : AccessibilityService() {
         // Click the last clickable view in active window (the Send button at bottom right)
         for (node in allClickables.reversed()) {
             val desc = node.contentDescription?.toString()?.lowercase() ?: ""
-            if (!desc.contains("back") && !desc.contains("menu") && !desc.contains("settings")) {
+            if (!desc.contains("back") && !desc.contains("menu") && !desc.contains("settings") && !desc.contains("address")) {
                 val clicked = performClickOnNodeOrParent(node)
                 if (clicked) return true
             }

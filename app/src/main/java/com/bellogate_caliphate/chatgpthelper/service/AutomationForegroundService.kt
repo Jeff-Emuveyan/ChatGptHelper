@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -29,7 +30,8 @@ class AutomationForegroundService : Service() {
 
         private const val CHANNEL_ID = "chatgpt_automation_channel"
         private const val NOTIFICATION_ID = 1001
-        private const val CHATGPT_PACKAGE_NAME = "com.openai.chatgpt"
+        private const val CHROME_PACKAGE_NAME = "com.android.chrome"
+        private const val CHATGPT_URL = "https://chatgpt.com"
         private const val TIMER_INTERVAL_SECONDS = 240 // 4 minutes
     }
 
@@ -93,8 +95,8 @@ class AutomationForegroundService : Service() {
                 AutomationManager.onBatchSending()
                 updateNotification("Sending batch ${state.sentBatches + 1} of ${state.totalBatches}...")
 
-                launchChatGPTApp()
-                delay(2500) // Allow ChatGPT app to open and render UI
+                launchChromeWithChatGPT()
+                delay(3000) // Allow Chrome browser & web page to render
 
                 val (sendSuccess, errorDetails) = accessibilityService.sendBatchToChatGPT(currentBatch.formattedPrompt)
 
@@ -120,7 +122,7 @@ class AutomationForegroundService : Service() {
                         secondsRemaining--
                     }
                 } else {
-                    val msg = errorDetails ?: "Failed to paste batch into ChatGPT"
+                    val msg = errorDetails ?: "Failed to paste batch into ChatGPT in Chrome"
                     AutomationManager.setError(msg)
                     updateNotification("Error: $msg")
                     delay(5000)
@@ -136,19 +138,22 @@ class AutomationForegroundService : Service() {
         updateNotification("Automation paused")
     }
 
-    private fun launchChatGPTApp() {
-        var launchIntent = packageManager.getLaunchIntentForPackage(CHATGPT_PACKAGE_NAME)
-        if (launchIntent == null) {
-            launchIntent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                setPackage(CHATGPT_PACKAGE_NAME)
-            }
+    private fun launchChromeWithChatGPT() {
+        val uri = Uri.parse(CHATGPT_URL)
+        val chromeIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage(CHROME_PACKAGE_NAME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
         try {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            startActivity(launchIntent)
+            startActivity(chromeIntent)
         } catch (e: Exception) {
-            AutomationManager.setError("ChatGPT app ($CHATGPT_PACKAGE_NAME) is not installed on this device.")
+            val launchIntent = packageManager.getLaunchIntentForPackage(CHROME_PACKAGE_NAME)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(launchIntent)
+            } else {
+                AutomationManager.setError("Google Chrome ($CHROME_PACKAGE_NAME) is not installed on this device.")
+            }
         }
     }
 
