@@ -6,9 +6,15 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.Rect
-import android.os.Bundle
+import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.bellogate_caliphate.chatgpthelper.data.AutomationManager
@@ -64,23 +70,113 @@ class GptAutomationService : AccessibilityService() {
         }
     }
 
+    private fun showRedClickIndicator(x: Float, y: Float) {
+        try {
+            val windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+
+            val radius = 30 // 30px radius circle
+            val size = radius * 2
+
+            val redDotView = View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(android.graphics.Color.RED)
+                    setStroke(4, android.graphics.Color.WHITE)
+                }
+            }
+
+            val params = WindowManager.LayoutParams(
+                size,
+                size,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                this.x = (x - radius).toInt()
+                this.y = (y - radius).toInt()
+            }
+
+            windowManager.addView(redDotView, params)
+
+            // Remove red dot overlay after 800ms
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    windowManager.removeView(redDotView)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error removing red dot overlay: ${e.localizedMessage}")
+                }
+            }, 800)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not draw red click indicator: ${e.localizedMessage}")
+        }
+    }
+
+    fun clickAtPosition(x: Float, y: Float) {
+        Log.d("JEFF", "Initiating gesture click at position ($x, $y)")
+
+        // Show visual red circle overlay at target coordinates
+        showRedClickIndicator(x, y)
+
+        val path = Path().apply {
+            moveTo(x, y)
+        }
+
+        val gesture = GestureDescription.Builder()
+            .addStroke(
+                GestureDescription.StrokeDescription(path, 0, 100)
+            )
+            .build()
+
+        dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription) {
+                super.onCompleted(gestureDescription)
+                Log.d("JEFF", "Gesture click COMPLETED at ($x, $y)")
+            }
+            override fun onCancelled(gestureDescription: GestureDescription) {
+                super.onCancelled(gestureDescription)
+                Log.w("JEFF", "Gesture click CANCELLED at ($x, $y)")
+            }
+        }, null)
+    }
+
+    fun longClickAtPosition(x: Float, y: Float) {
+        Log.d("JEFF", "Initiating LONG PRESS gesture at position ($x, $y)")
+
+        showRedClickIndicator(x, y)
+
+        val path = Path().apply {
+            moveTo(x, y)
+        }
+
+        val gesture = GestureDescription.Builder()
+            .addStroke(
+                GestureDescription.StrokeDescription(path, 0, 700) // 700ms long press
+            )
+            .build()
+
+        dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription) {
+                super.onCompleted(gestureDescription)
+                Log.d("JEFF", "LONG PRESS gesture COMPLETED at ($x, $y)")
+            }
+            override fun onCancelled(gestureDescription: GestureDescription) {
+                super.onCancelled(gestureDescription)
+                Log.w("JEFF", "LONG PRESS gesture CANCELLED at ($x, $y)")
+            }
+        }, null)
+    }
+
     /**
-     * Pastes current batch into ChatGPT web in Chrome and clicks Send button.
+     * Pastes current batch into ChatGPT web in Chrome using Long Press + Paste Popup.
      * Suspends until the operation succeeds or times out.
      */
     suspend fun sendBatchToChatGPT(batchText: String): Pair<Boolean, String?> = withContext(Dispatchers.Main) {
-        val rootNode = rootInActiveWindow
-            ?: return@withContext Pair(false, "Could not access screen. Make sure Chrome is open in foreground.")
+        if (rootInActiveWindow == null) {
+            return@withContext Pair(false, "Could not access screen. Make sure Chrome is open in foreground.")
+        }
 
-        // Dump node tree for debugging
-        Log.d("A11Y", "--- START NODE TREE DUMP ---")
-        findAndLogNodes(rootNode)
-        Log.d("A11Y", "--- END NODE TREE DUMP ---")
-
-        val inputNode = findEditableNode(rootNode)
-            ?: return@withContext Pair(false, "Could not find ChatGPT input box in Chrome screen.")
-
-        // 1. Copy text to System Clipboard so React detects genuine Paste event
+        // 1. Copy batch text to System Clipboard
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             if (clipboard != null) {
@@ -91,206 +187,87 @@ class GptAutomationService : AccessibilityService() {
             Log.w(TAG, "Could not access Clipboard: ${e.localizedMessage}")
         }
 
-        // 2. Focus input field
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        // 2. Wait 10 seconds before long pressing on the search bar
+        Log.d("JEFF", "Step 1: Waiting 10 seconds before long pressing on search bar...")
+        delay(10_000)
 
-        // Clear any existing text in search input field first
-        val clearArgs = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
-        }
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clearArgs)
-        delay(200)
+        // 3. Long Press on the ChatGPT search bar at position (360, 1055) to trigger Android's Paste popup
+        Log.d("JEFF", "Step 2: Long Pressing ChatGPT search bar at position (360, 1055) to trigger Paste popup")
+        longClickAtPosition(360f, 1055f)
+        delay(800) // Allow Chrome's Paste popup menu to appear
 
-        // 3. Perform ACTION_SET_TEXT with new batch text
-        val arguments = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, batchText)
-        }
-        val textSetSuccess = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        // 4. Search all active windows (including floating context toolbar) for "Paste"
+        val pasteClicked = findAndClickPasteInAllWindows()
+        Log.d("JEFF", "Step 3: Paste popup button click result = $pasteClicked")
 
-        // 4. Perform ACTION_PASTE (triggers native Web input/paste events so React updates state)
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-
-        if (!textSetSuccess) {
-            return@withContext Pair(false, "Failed to paste batch URLs into ChatGPT input box in Chrome.")
+        if (!pasteClicked) {
+            // Fallback: Tap coordinates (190, 980) on far left of popup toolbar where "Paste" is located
+            Log.d("JEFF", "Step 3 Fallback: Tapping 'Paste' popup at far left coordinates (190, 980)")
+            clickAtPosition(190f, 980f)
         }
 
-        // 5. Set cursor selection to end of text
-        val selectionArgs = Bundle().apply {
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, batchText.length)
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, batchText.length)
-        }
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selectionArgs)
+        // 5. Wait 5 seconds for React on chatgpt.com to process the inserted batch and enable Send button
+        Log.d("JEFF", "Step 4: Batch pasted. Waiting 5 seconds for React state update...")
+        delay(5000)
 
-        // 6. Wait 3 seconds for React on chatgpt.com to process the inserted batch and enable the Send button
-        Log.d("A11Y", "Batch pasted. Waiting 3 seconds for React state and Send button to update...")
-        delay(3000)
-
-        // 7. Press the Back button ONCE to dismiss the software keyboard
-        Log.d("A11Y", "Pressing Back button to dismiss software keyboard...")
+        // 6. Press the Back button ONCE to dismiss the software keyboard
+        Log.d("JEFF", "Step 5: Pressing Back button to dismiss software keyboard...")
         performGlobalAction(GLOBAL_ACTION_BACK)
-        delay(500) // Brief delay for keyboard dismissal animation
+        delay(800)
 
-        // 8. Poll over a 5-second window to find and click composer-submit-button / screen coordinates
-        for (attempt in 1..10) {
-            delay(500)
-            val currentRoot = rootInActiveWindow ?: rootNode
+        // 7. Click the blue Send button at position (640f, 1130f)
+        Log.d("JEFF", "Step 6: Clicking blue Send button at position (640, 1130)")
+        clickAtPosition(640f, 1130f)
 
-            val composerButton = findComposerSubmitButtonNode(currentRoot)
-                ?: findClickableNodeInInputContainer(inputNode)
-
-            if (composerButton != null) {
-                val clicked = clickComposerSubmitButton(composerButton, inputNode)
-                if (clicked) {
-                    return@withContext Pair(true, null)
-                }
-            } else {
-                tapSendButtonByCoordinates(inputNode)
-            }
-        }
-
-        return@withContext Pair(false, "Batch pasted, but Send button could not be clicked in Chrome.")
+        return@withContext Pair(true, null)
     }
 
-    private fun findComposerSubmitButtonNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (node == null) return null
+    private fun findAndClickPasteInAllWindows(): Boolean {
+        try {
+            val activeWindows = windows
+            for (window in activeWindows) {
+                val root = window.root ?: continue
+                if (findAndClickPasteOption(root)) {
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking active windows for Paste button: ${e.localizedMessage}")
+        }
+        return findAndClickPasteOption(rootInActiveWindow)
+    }
+
+    private fun findAndClickPasteOption(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
 
         val text = node.text?.toString()?.lowercase() ?: ""
         val desc = node.contentDescription?.toString()?.lowercase() ?: ""
         val resId = node.viewIdResourceName?.lowercase() ?: ""
 
-        val isComposerButton = resId == "composer-submit-button" ||
-                resId.contains("composer-submit-button") ||
-                resId.contains("send-button") ||
-                text == "send prompt" ||
-                desc == "send prompt"
+        val isPasteButton = text == "paste" ||
+                desc == "paste" ||
+                resId.contains("paste")
 
-        if (isComposerButton) {
-            return node
-        }
+        if (isPasteButton) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            Log.d("JEFF", "Found Paste popup button at $rect (${node.className}, viewId: $resId, text: $text)")
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findComposerSubmitButtonNode(child)
-            if (found != null) return found
-        }
-
-        return null
-    }
-
-    private fun clickComposerSubmitButton(buttonNode: AccessibilityNodeInfo, inputNode: AccessibilityNodeInfo): Boolean {
-        val rect = Rect()
-        buttonNode.getBoundsInScreen(rect)
-
-        Log.d("A11Y", "Found composer-submit-button at bounds: $rect")
-
-        // 1. Accessibility ACTION_CLICK on button directly
-        buttonNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
-        // 2. Dispatch hardware touch gesture at center of button
-        if (rect.centerX() > 0 && rect.centerY() > 0) {
-            val tapped = dispatchTapGesture(rect.centerX().toFloat(), rect.centerY().toFloat())
-            Log.d("A11Y", "Dispatched tap gesture at (${rect.centerX()}, ${rect.centerY()}), result = $tapped")
-        }
-
-        // 3. Fallback: Tap screen coordinates relative to prompt box & screen
-        tapSendButtonByCoordinates(inputNode)
-
-        // 4. Accessibility ACTION_CLICK on parent container
-        buttonNode.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
-        return true
-    }
-
-    private fun tapSendButtonByCoordinates(inputNode: AccessibilityNodeInfo) {
-        val inputRect = Rect()
-        inputNode.getBoundsInScreen(inputRect)
-
-        val displayMetrics = resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels.toFloat()
-        val screenHeight = displayMetrics.heightPixels.toFloat()
-
-        Log.d("A11Y", "Input box bounds: $inputRect, Screen size: ${screenWidth}x${screenHeight}")
-
-        // 1. Calculate target coordinates based on input box bounds
-        val boxX = if (inputRect.right > 0) (inputRect.right - 80f) else (screenWidth * 0.888f)
-        val boxY = if (inputRect.bottom > 0) (inputRect.bottom - 80f) else (screenHeight * 0.883f)
-
-        Log.d("A11Y", "Attempting gesture tap at box coords: ($boxX, $boxY) and screen ratio: (${screenWidth * 0.888f}, ${screenHeight * 0.883f})")
-
-        // 2. Dispatch tap gesture at calculated box coords
-        val t1 = dispatchTapGesture(boxX, boxY)
-
-        // 3. Dispatch tap gesture at Small Phone exact blue button position (640, 1130)
-        val t2 = dispatchTapGesture(screenWidth * 0.888f, screenHeight * 0.883f)
-
-        Log.d("A11Y", "Gesture tap results: t1=$t1, t2=$t2")
-    }
-
-    private fun dispatchTapGesture(x: Float, y: Float): Boolean {
-        if (x <= 0 || y <= 0) return false
-        val path = Path().apply {
-            moveTo(x, y)
-        }
-        val gestureBuilder = GestureDescription.Builder()
-        val stroke = GestureDescription.StrokeDescription(path, 0, 50)
-        gestureBuilder.addStroke(stroke)
-        return dispatchGesture(gestureBuilder.build(), null, null)
-    }
-
-    private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (node == null) return null
-
-        val hint = hintTextToString(node)
-        val contentDesc = node.contentDescription?.toString()?.lowercase() ?: ""
-        val text = node.text?.toString()?.lowercase() ?: ""
-        val resourceId = node.viewIdResourceName?.lowercase() ?: ""
-
-        val isEditableMatch = node.isEditable ||
-                node.className == "android.widget.EditText" ||
-                hint.contains("message") || hint.contains("ask") ||
-                contentDesc.contains("message") || contentDesc.contains("ask") ||
-                text.contains("message chatgpt") || text.contains("ask anything") ||
-                resourceId.contains("prompt-textarea")
-
-        if (isEditableMatch) {
-            return node
-        }
-
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findEditableNode(child)
-            if (found != null) return found
-        }
-        return null
-    }
-
-    private fun hintTextToString(node: AccessibilityNodeInfo): String {
-        return try {
-            node.hintText?.toString()?.lowercase() ?: ""
-        } catch (e: Exception) {
-            ""
-        }
-    }
-
-    private fun findClickableNodeInInputContainer(inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var parent: AccessibilityNodeInfo? = inputNode.parent
-        var depth = 0
-        while (parent != null && depth < 4) {
-            for (i in 0 until parent.childCount) {
-                val child = parent.getChild(i) ?: continue
-                if (child != inputNode) {
-                    val desc = child.contentDescription?.toString()?.lowercase() ?: ""
-                    val text = child.text?.toString()?.lowercase() ?: ""
-                    if (child.isClickable || desc.isNotEmpty() || text.isNotEmpty() || child.className == "android.widget.Button") {
-                        if (!desc.contains("mic") && !desc.contains("voice") && !desc.contains("attach")) {
-                            return child
-                        }
-                    }
-                }
+            // Perform direct click & gesture tap at center of "Paste" button
+            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (rect.centerX() > 0 && rect.centerY() > 0) {
+                clickAtPosition(rect.centerX().toFloat(), rect.centerY().toFloat())
+            } else {
+                clickAtPosition(190f, 980f)
             }
-            parent = parent.parent
-            depth++
+            return true
         }
-        return null
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (findAndClickPasteOption(child)) return true
+        }
+
+        return false
     }
 }
