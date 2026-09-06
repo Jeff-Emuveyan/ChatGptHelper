@@ -30,7 +30,7 @@ class AutomationForegroundService : Service() {
         private const val CHANNEL_ID = "chatgpt_automation_channel"
         private const val NOTIFICATION_ID = 1001
         private const val CHROME_PACKAGE_NAME = "com.android.chrome"
-        private const val TIMER_INTERVAL_SECONDS = 180
+        private const val TIMER_INTERVAL_SECONDS = 150 // 2min 30 sec
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
