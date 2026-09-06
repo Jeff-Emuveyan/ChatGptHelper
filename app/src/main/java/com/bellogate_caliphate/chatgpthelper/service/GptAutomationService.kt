@@ -94,7 +94,14 @@ class GptAutomationService : AccessibilityService() {
         // 2. Focus input field
         inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
 
-        // 3. Perform ACTION_SET_TEXT
+        // Clear any existing text in search input field first
+        val clearArgs = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+        }
+        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clearArgs)
+        delay(200)
+
+        // 3. Perform ACTION_SET_TEXT with new batch text
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, batchText)
         }
@@ -233,7 +240,7 @@ class GptAutomationService : AccessibilityService() {
     private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
 
-        val hint = node.hintText?.toString()?.lowercase() ?: ""
+        val hint = hintTextToString(node)
         val contentDesc = node.contentDescription?.toString()?.lowercase() ?: ""
         val text = node.text?.toString()?.lowercase() ?: ""
         val resourceId = node.viewIdResourceName?.lowercase() ?: ""
@@ -255,6 +262,14 @@ class GptAutomationService : AccessibilityService() {
             if (found != null) return found
         }
         return null
+    }
+
+    private fun hintTextToString(node: AccessibilityNodeInfo): String {
+        return try {
+            node.hintText?.toString()?.lowercase() ?: ""
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     private fun findClickableNodeInInputContainer(inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
