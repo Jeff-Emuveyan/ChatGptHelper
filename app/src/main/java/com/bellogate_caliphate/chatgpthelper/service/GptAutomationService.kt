@@ -201,9 +201,9 @@ class GptAutomationService : AccessibilityService() {
         Log.d("JEFF", "Step 3: Paste popup button click result = $pasteClicked")
 
         if (!pasteClicked) {
-            // Fallback: Tap coordinates (190, 980) on far left of popup toolbar where "Paste" is located
-            Log.d("JEFF", "Step 3 Fallback: Tapping 'Paste' popup at far left coordinates (190, 980)")
-            clickAtPosition(190f, 980f)
+            // Fallback: Tap coordinates (120, 980) on the far-left of popup toolbar where "Paste" is located
+            Log.d("JEFF", "Step 3 Fallback: Tapping 'Paste' popup at far left coordinates (120, 980)")
+            clickAtPosition(120f, 980f)
         }
 
         // 5. Wait 5 seconds for React on chatgpt.com to process the inserted batch and enable Send button
@@ -251,15 +251,18 @@ class GptAutomationService : AccessibilityService() {
         if (isPasteButton) {
             val rect = Rect()
             node.getBoundsInScreen(rect)
-            Log.d("JEFF", "Found Paste popup button at $rect (${node.className}, viewId: $resId, text: $text)")
+            Log.d("JEFF", "Found Paste popup button at bounds: $rect (${node.className}, viewId: $resId, text: $text)")
 
-            // Perform direct click & gesture tap at center of "Paste" button
+            // Perform direct click
             node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            if (rect.centerX() > 0 && rect.centerY() > 0) {
-                clickAtPosition(rect.centerX().toFloat(), rect.centerY().toFloat())
-            } else {
-                clickAtPosition(190f, 980f)
-            }
+
+            // Tap exact left portion of the Paste node
+            val targetX = if (rect.left > 0) (rect.left + 30f) else 120f
+            val targetY = if (rect.centerY() > 0) rect.centerY().toFloat() else 980f
+
+            Log.d("JEFF", "Tapping 'Paste' node left bounds at ($targetX, $targetY)")
+            clickAtPosition(targetX, targetY)
+
             return true
         }
 
