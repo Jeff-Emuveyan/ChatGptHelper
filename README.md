@@ -1,37 +1,81 @@
-# ChatGptHelper 🚀
+# ChatGptHelper 🤖 (UiAutomator Test Suite)
 
-An Android application that automates sending large lists of website URLs to **ChatGPT in Google Chrome** (`https://chatgpt.com`) in timed batches.
+> [!IMPORTANT]
+> **📊 Observe Real-Time Execution in Logcat:**
+> To watch live batch execution steps, delays, and progress logs while the automation runs, open Android Studio's **Logcat** tool window and filter for:
+> ```text
+> tag:JEFF_UIAUTOMATOR
+> ```
 
----
+An Android system-wide automation test suite built with **UiAutomator** (`androidx.test.uiautomator:uiautomator`) that automates sending large lists of website URLs to **ChatGPT on Google Chrome** (`https://chatgpt.com`) in timed batches.
 
-## 📌 The Problem It Solves
-
-When reviewing long lists of company websites (e.g., 500–1000+ career pages for job vacancies), manually pasting 25 URLs every 4–5 minutes into ChatGPT on Chrome can take hours of continuous manual effort. 
-
-**ChatGptHelper** automates this entire repetitive workflow using Android Accessibility Services and Foreground Services.
-
----
-
-## ⚙️ How It Works
-
-1. **URL Batch Parsing**: The app reads your URL list from `app/src/main/assets/urls.txt`. Groups of URLs separated by **blank lines** are automatically converted into distinct batches.
-2. **Chrome Browser Launch**: The app opens Google Chrome directly to `https://chatgpt.com`.
-3. **Accessibility Automation (`GptAutomationService`)**: Uses Android's `AccessibilityService` API to inspect Chrome's active window, locate the web text input box, insert the current batch prompt, and click the web **Send** button automatically.
-4. **Timed Foreground Execution (`AutomationForegroundService`)**: Runs as a Foreground Service with a wake lock to ensure the timer runs reliably in the background every 4 minutes (configurable) without Android putting the app to sleep.
-5. **Jetpack Compose UI**: Provides real-time metrics, including:
-   - Total URLs loaded
-   - Total Batches
-   - Batches Sent
-   - Batches Remaining
-   - Overall Progress bar
-   - Start and Pause controls
+> [!NOTE]
+> **This is an Android Test Automation Project, NOT a standalone app that needs to be manually operated.** All automation logic runs inside the Android Instrumentation Test Runner via `GptUiAutomatorTest.kt`.
 
 ---
 
-## 🚀 How to Use the App
+## ⚙️ How the System Works
 
-### Step 1: Add Your URLs
-Open `app/src/main/assets/urls.txt` in Android Studio and paste your list of URLs. Separate each batch using a **blank line**:
+The test script [`GptUiAutomatorTest.kt`](file:///C:/Users/jemuveyan/AndroidStudioProjects/ChatGptHelper/app/src/androidTest/java/com/bellogate_caliphate/chatgpthelper/GptUiAutomatorTest.kt) uses `UiDevice` to control Google Chrome directly at the system level:
+
+```
+[ Read URL Batches from assets/urls.txt ]
+                   │
+                   ▼
+[ Foreground Google Chrome via UiDevice ]
+                   │
+                   ▼
+[ Locate "Ask ChatGPT" box (prompt-textarea) or tap (360, 1055) ]
+                   │
+                   ▼
+[ Set/Paste Batch Prompt via UiObject2.setText() / Clipboard ]
+                   │
+                   ▼
+[ Wait 3 Seconds for React State Update on chatgpt.com ]
+                   │
+                   ▼
+[ device.pressBack() -> Press Back Button ONCE to Close Keyboard ]
+                   │
+                   ▼
+[ Click Send Button (composer-submit-button) or tap (640, 1130) ]
+                   │
+                   ▼
+[ Thread.sleep(150_000) -> Wait 150s (2.5 mins) ] -> Repeat
+```
+
+---
+
+## 📱 Hardware & Emulator Specifications
+
+This UiAutomator test is configured and calibrated for the following emulator profile:
+
+* **Device Profile**: Small Phone
+* **Resolution (Pixels)**: `720 x 1280` px
+* **Resolution (DP)**: `360 x 640` dp
+* **Density**: `320 dpi`
+* **API Level**: Android 10 to 16 (API 29–36)
+* **Architecture**: x86_64 / arm64-v8a
+
+---
+
+## 🌐 ChatGPT Setup Instructions
+
+Before running the test:
+
+1. Launch **Google Chrome** on your emulator.
+2. Navigate to `https://chatgpt.com` and log into your OpenAI account.
+3. Start a new chat tab (or open your existing conversation).
+4. Send your initial instruction prompt to ChatGPT, for example:
+   > *"I will send you batches of company website URLs. Please check each batch for active job vacancies and summarize the results."*
+5. Leave Chrome open to that conversation tab on the emulator screen.
+
+---
+
+## 📝 Adding Your URLs
+
+1. Open [`app/src/main/assets/urls.txt`](file:///C:/Users/jemuveyan/AndroidStudioProjects/ChatGptHelper/app/src/main/assets/urls.txt) in Android Studio.
+2. Paste your list of website URLs.
+3. Separate each batch using **blank lines**:
 
 ```text
 https://company1.com/careers
@@ -43,41 +87,41 @@ https://company5.com/careers
 https://company6.com/jobs
 ```
 
-### Step 2: Grant Accessibility Permission
-1. Build and install the app on your Android device or emulator.
-2. Open **ChatGptHelper**.
-3. Tap the **"Open Accessibility Settings"** banner and enable **ChatGptHelper** under Installed Apps / Accessibility.
-
-### Step 3: Give ChatGPT Initial Instructions in Chrome
-1. Open Google Chrome on your Android device and go to `https://chatgpt.com`.
-2. Send an initial instruction prompt, such as:
-   > *"I will provide batches of company website URLs. Please check each batch for active job vacancies and summarize the results."*
-
-### Step 4: Start Automation
-1. Return to **ChatGptHelper**.
-2. Tap **Start**.
-3. The app will automatically launch Chrome to `https://chatgpt.com`, paste the first batch, click **Send**, wait 4 minutes, and repeat until all batches are sent!
-
 ---
 
-## ⏱️ How to Change the Waiting Time
+## 🚀 How to Run the UiAutomator Test
 
-To adjust the waiting interval between batches (default is 4 minutes / 240 seconds), open `AutomationForegroundService.kt` and edit `TIMER_INTERVAL_SECONDS`:
+### Option A: From Android Studio (Recommended)
+1. Open [`app/src/androidTest/java/com/bellogate_caliphate/chatgpthelper/GptUiAutomatorTest.kt`](file:///C:/Users/jemuveyan/AndroidStudioProjects/ChatGptHelper/app/src/androidTest/java/com/bellogate_caliphate/chatgpthelper/GptUiAutomatorTest.kt).
+2. Click the green **Run** play icon next to `class GptUiAutomatorTest` or `@Test fun runChatGPTUrlBatchAutomation()`.
 
-```kotlin
-// app/src/main/java/com/bellogate_caliphate/chatgpthelper/service/AutomationForegroundService.kt
-private const val TIMER_INTERVAL_SECONDS = 240 // 4 minutes (e.g. 180 for 3 mins, 300 for 5 mins)
+### Option B: Via Terminal / ADB
+Run this command in terminal/PowerShell:
+```bash
+adb shell am instrument -w -e class com.bellogate_caliphate.chatgpthelper.GptUiAutomatorTest com.bellogate_caliphate.chatgpthelper.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 ---
 
-## 🛠️ Tech Stack & Requirements
+## 📊 Monitoring Real-Time Logs
 
-* **Language**: Kotlin
-* **UI Framework**: Jetpack Compose (Material 3)
-* **Minimum SDK**: Android 10 (API 29+) / Target SDK 37
-* **Android System APIs**:
-  * `AccessibilityService`
-  * `ForegroundService` (Special Use)
-  * Package Visibility (`<queries>`) for `com.android.chrome`
-* **Prerequisites**: Google Chrome installed on device.
+In Android Studio's **Logcat** tool window, filter for:
+```text
+tag:JEFF_UIAUTOMATOR
+```
+
+You will see real-time progress logs:
+* `JEFF_UIAUTOMATOR: Loaded 15 URLs in 3 batches from assets/urls.txt`
+* `JEFF_UIAUTOMATOR: Processing Batch 1 of 3 (5 URLs)...`
+* `JEFF_UIAUTOMATOR: ✅ Batch 1/3 sent successfully!`
+* `JEFF_UIAUTOMATOR: Waiting 150 seconds before sending next batch...`
+
+---
+
+## ⏱️ Modifying Waiting Interval
+
+To change the waiting interval between batches (default is 150 seconds / 2.5 minutes), open [`GptUiAutomatorTest.kt`](file:///C:/Users/jemuveyan/AndroidStudioProjects/ChatGptHelper/app/src/androidTest/java/com/bellogate_caliphate/chatgpthelper/GptUiAutomatorTest.kt) and edit `BATCH_DELAY_MS`:
+
+```kotlin
+private const val BATCH_DELAY_MS = 150_000L // 150 seconds (2.5 minutes)
+```
