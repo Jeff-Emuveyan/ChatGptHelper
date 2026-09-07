@@ -120,8 +120,8 @@ You will see real-time progress logs:
 
 ## ⏱️ Modifying Waiting Interval
 
-To change the waiting interval between batches (default is 150 seconds / 2.5 minutes), open [`GptUiAutomatorTest.kt`](file:///C:/Users/jemuveyan/AndroidStudioProjects/ChatGptHelper/app/src/androidTest/java/com/bellogate_caliphate/chatgpthelper/GptUiAutomatorTest.kt) and edit `BATCH_DELAY_MS`:
+To change the waiting interval between batches (default is 240 seconds / 4 minutes), open [`GptUiAutomatorTest.kt`](file:///C:/Users/jemuveyan/AndroidStudioProjects/ChatGptHelper/app/src/androidTest/java/com/bellogate_caliphate/chatgpthelper/GptUiAutomatorTest.kt) and edit `BATCH_DELAY_MS`:
 
 ```kotlin
-private const val BATCH_DELAY_MS = 150_000L // 150 seconds (2.5 minutes)
+private const val BATCH_DELAY_MS = 240_000L // 240 seconds (4 minutes)
 ```
