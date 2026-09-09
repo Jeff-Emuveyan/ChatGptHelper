@@ -21,7 +21,7 @@ class GptUiAutomatorTest {
     companion object {
         private const val TAG = "JEFF_UIAUTOMATOR"
         private const val CHROME_PACKAGE = "com.android.chrome"
-        private const val BATCH_DELAY_MS = 240_000L // 240 seconds (4 minutes) waiting interval
+        private const val BATCH_DELAY_MS = 300_000L // 300 seconds (5 minutes) waiting interval
     }
 
     private lateinit var device: UiDevice
